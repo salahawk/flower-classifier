@@ -6,13 +6,12 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
-
 import pathlib
 
 img_width = 180
 img_height = 180
 batch_size = 32
-epochs = 10
+epochs = 15
 
 
 def download_dataset(dataset_url):
@@ -64,22 +63,36 @@ def train_model(train_ds, val_ds):
     """
     num_classes = len(train_ds.class_names)
 
+    data_augmentation = keras.Sequential(
+        [
+            layers.RandomFlip("horizontal",
+                              input_shape=(img_height,
+                                           img_width,
+                                           3)),
+            layers.RandomRotation(0.1),
+            layers.RandomZoom(0.1),
+        ]
+    )
+
     model = Sequential([
-        layers.Rescaling(1./255, input_shape=(img_height, img_width, 3)),
-        layers.Conv2D(16, 3, padding="same", activation="relu"),
+        data_augmentation,
+        layers.Rescaling(1./255),
+        layers.Conv2D(16, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
-        layers.Conv2D(32, 3, padding="same", activation="relu"),
+        layers.Conv2D(32, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
-        layers.Conv2D(64, 3, padding="same", activation="relu"),
+        layers.Conv2D(64, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
+        layers.Dropout(0.2),
         layers.Flatten(),
-        layers.Dense(128, activation="relu"),
-        layers.Dense(num_classes)
+        layers.Dense(128, activation='relu'),
+        layers.Dense(num_classes, name="outputs")
     ])
     model.compile(optimizer='adam',
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(
                       from_logits=True),
                   metrics=['accuracy'])
+    model.build((None, batch_size, batch_size, 3))
     model.summary()
 
     history = model.fit(
@@ -112,7 +125,7 @@ def visualize_dataset(train_ds):
 # end def
 
 
-def visualize_train_result():
+def visualize_train_result(history):
     """
     Purpose: Shows plots of the loss and training and validation sets
     """
@@ -151,3 +164,4 @@ train_ds, val_ds = create_dataset(data_dir)
 visualize_dataset(train_ds)
 improve_performance(train_ds, val_ds)
 history = train_model(train_ds, val_ds)
+visualize_train_result(history)
