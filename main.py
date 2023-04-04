@@ -6,13 +6,12 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
-
 import pathlib
 
 img_width = 180
 img_height = 180
 batch_size = 32
-epochs = 10
+epochs = 15
 
 
 def download_dataset(dataset_url):
@@ -64,22 +63,36 @@ def train_model(train_ds, val_ds):
     """
     num_classes = len(train_ds.class_names)
 
+    data_augmentation = keras.Sequential(
+        [
+            layers.RandomFlip("horizontal",
+                              input_shape=(img_height,
+                                           img_width,
+                                           3)),
+            layers.RandomRotation(0.1),
+            layers.RandomZoom(0.1),
+        ]
+    )
+
     model = Sequential([
-        layers.Rescaling(1./255, input_shape=(img_height, img_width, 3)),
-        layers.Conv2D(16, 3, padding="same", activation="relu"),
+        data_augmentation,
+        layers.Rescaling(1./255),
+        layers.Conv2D(16, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
-        layers.Conv2D(32, 3, padding="same", activation="relu"),
+        layers.Conv2D(32, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
-        layers.Conv2D(64, 3, padding="same", activation="relu"),
+        layers.Conv2D(64, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
+        layers.Dropout(0.2),
         layers.Flatten(),
-        layers.Dense(128, activation="relu"),
-        layers.Dense(num_classes)
+        layers.Dense(128, activation='relu'),
+        layers.Dense(num_classes, name="outputs")
     ])
     model.compile(optimizer='adam',
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(
                       from_logits=True),
                   metrics=['accuracy'])
+    model.build((None, batch_size, batch_size, 3))
     model.summary()
 
     history = model.fit(
@@ -88,7 +101,7 @@ def train_model(train_ds, val_ds):
         epochs=epochs
     )
 
-    return history
+    return model, history
 # end def
 
 
@@ -112,7 +125,7 @@ def visualize_dataset(train_ds):
 # end def
 
 
-def visualize_train_result():
+def visualize_train_result(history):
     """
     Purpose: Shows plots of the loss and training and validation sets
     """
@@ -150,4 +163,23 @@ data_dir = download_dataset(
 train_ds, val_ds = create_dataset(data_dir)
 visualize_dataset(train_ds)
 improve_performance(train_ds, val_ds)
-history = train_model(train_ds, val_ds)
+model, history = train_model(train_ds, val_ds)
+visualize_train_result(history)
+
+
+sunflower_url = "https://storage.googleapis.com/download.tensorflow.org/example_images/592px-Red_sunflower.jpg"
+sunflower_path = tf.keras.utils.get_file('Red_sunflower', origin=sunflower_url)
+
+img = tf.keras.utils.load_img(
+    sunflower_path, target_size=(img_height, img_width)
+)
+img_array = tf.keras.utils.img_to_array(img)
+img_array = tf.expand_dims(img_array, 0)  # Create a batch
+
+predictions = model.predict(img_array)
+score = tf.nn.softmax(predictions[0])
+
+print(
+    "This image most likely belongs to {} with a {:.2f} percent confidence."
+    .format(train_ds.class_names[np.argmax(score)], 100 * np.max(score))
+)
